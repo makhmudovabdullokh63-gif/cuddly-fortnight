@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CampusAI - University Portal & Assistant</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar and animations */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    </style>
+</head>
+<body class="h-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans transition-colors duration-200">
+
+    <div id="app" class="h-full flex flex-col">
+        <!-- Rendered dynamically by JavaScript -->
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <script>
+        const DB = {
+            users: [
+                { id: 'u1', name: 'Alex Johnson', email: 'student@campus.edu', role: 'student', avatar: 'https://placehold.co/150/6366f1/ffffff?text=AJ', major: 'Computer Science', gpa: '3.82', credits: 78 },
+                { id: 'u2', name: 'Dr. Robert Chen', email: 'faculty@campus.edu', role: 'faculty', avatar: 'https://placehold.co/150/059669/ffffff?text=RC', department: 'Computer Science & Engineering', office: 'Science Hall 304' },
+                { id: 'u3', name: 'Director Sarah Vance', email: 'admin@campus.edu', role: 'admin', avatar: 'https://placehold.co/150/dc2626/ffffff?text=SV', title: 'Campus Operations & IT' }
+            ],
+            courses: [
+                { id: 'c1', code: 'CS101', name: 'Intro to Computer Science', instructor: 'Dr. Robert Chen', schedule: 'Mon/Wed 10:00 AM', room: 'Hall B, Science Center', credits: 4, grade: 'A' },
+                { id: 'c2', code: 'MATH202', name: 'Linear Algebra & Matrices', instructor: 'Dr. Elena Rostova', schedule: 'Tue/Thu 2:00 PM', room: 'Math Hall 102', credits: 3, grade: 'A-' },
+                { id: 'c3', code: 'ENG105', name: 'Advanced Technical Writing', instructor: 'Prof. Marcus Brody', schedule: 'Fri 9:00 AM', room: 'Humanities 210', credits: 3, grade: 'B+' },
+                { id: 'c4', code: 'PHYS150', name: 'University Physics I', instructor: 'Dr. Alan Grant', schedule: 'Mon/Wed/Fri 1:00 PM', room: 'Physics Lab 1', credits: 4, grade: 'In Progress' }
+            ],
+            locations: [
+                { name: 'Science Center & Hall B', type: 'Building', hours: '7:00 AM - 10:00 PM', desc: 'Main lecture halls, computer clusters, and physics labs.' },
+                { name: 'University Library', type: 'Facility', hours: '24/7 during finals', desc: 'Quiet study floors, group study pods, and research help desk.' },
+                { name: 'Student Union (The Hub)', type: 'Dining & Rec', hours: '8:00 AM - 11:00 PM', desc: 'Food court, bookstore, student lounge, and club offices.' },
+                { name: 'Athletic Center', type: 'Recreation', hours: '6:00 AM - 11:00 PM', desc: 'Gymnasium, indoor pool, climbing wall, and courts.' }
+            ],
+            announcements: [
+                { id: 'a1', title: 'Spring Add/Drop Deadline Approaching', date: 'Oct 15, 2026', author: 'Registrar Office', content: 'Last day to drop courses without academic penalty is this Friday at 5:00 PM.' },
+                { id: 'a2', title: 'Library Extended Hours for Midterms', date: 'Oct 12, 2026', author: 'University Library', content: 'The main library will remain open 24 hours starting this Monday through midterm week.' }
+            ],
+            messages: [
+                { sender: 'ai', text: 'Hello Alex! I am CampusAI, your 24/7 university assistant. How can I help you navigate campus today?', time: 'Just now' }
+            ],
+            logs: [
+                { id: 'l1', timestamp: '10:42 AM', type: 'AUTH', details: 'User student@campus.edu logged in successfully.' },
+                { id: 'l2', timestamp: '10:35 AM', type: 'SYSTEM', details: 'AI LLM vector embedding sync completed successfully.' },
+                { id: 'l3', timestamp: '09:15 AM', type: 'DB', details: 'Automatic backup generated (14.2 MB).' }
+            ]
+        };
+
+        let appState = {
+            currentUser: null, // Initialized via login modal or landing page
+            activeTab: 'chat', // 'chat', 'map', 'portal', 'admin'
+            darkMode: false,
+            chatInput: '',
+            searchQuery: '',
+            adminCsvStatus: '',
+            announcementForm: { title: '', content: '' }
+        };
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgClass = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-rose-600' : 'bg-indigo-600';
+            toast.className = `${bgClass} text-white px-4 py-3 rounded-xl shadow-lg flex items-center space-x-3 text-sm font-medium animate-fade-in pointer-events-auto`;
+            toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-triangle-exclamation' : 'fa-info-circle'}"></i><span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        function getAIResponse(prompt) {
+            const query = prompt.toLowerCase();
+            if (query.includes('hall b') || query.includes('where is') || query.includes('building')) {
+                return "Hall B is located inside the Science Center on the 2nd floor, right past the main atrium and central computer cluster. You can check the Campus Map tab for precise indoor directions!";
+            } else if (query.includes('deadline') || query.includes('add') || query.includes('drop') || query.includes('register')) {
+                return "The Spring semester add/drop deadline is this Friday at 5:00 PM. You can modify your schedule directly through your Student Portal or meet with your academic advisor.";
+            } else if (query.includes('email') || query.includes('professor') || query.includes('draft') || query.includes('message')) {
+                return "Here is a professional draft you can use:\n\n'Dear Professor [Name],\n\nI hope this email finds you well. I am a student in your [Course Code] class, and I was hoping to schedule a brief time during your office hours to discuss [Topic/Assignment].\n\nThank you for your time and guidance.\n\nBest regards,\n[Your Name]'";
+            } else if (query.includes('library') || query.includes('hours') || query.includes('study')) {
+                return "The University Library is open 24/7 during midterms and finals. Regular hours are Sunday-Thursday 7:00 AM - Midnight, and Friday-Saturday 7:00 AM - 10:00 PM.";
+            } else if (query.includes('grade') || query.includes('gpa') || query.includes('transcript')) {
+                return "Your current cumulative GPA is 3.82 with 78 completed credits. You can view your detailed course grades and GPA breakdown under the 'Student Portal' tab.";
+            } else {
+                return `I've processed your query about "${prompt}". As your CampusAI assistant, I have access to course catalogs, campus directories, library schedules, and faculty office hours. Is there anything specific regarding your classes or campus navigation I can look up for you?`;
+            }
+        }
+
+        function render() {
+            const root = document.getElementById('app');
+            if (appState.darkMode) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+
+            if (!appState.currentUser) {
+                root.innerHTML = renderLandingPage();
+            } else {
+                root.innerHTML = renderMainLayout();
+                attachEventListeners();
+            }
+        }
+
+        function renderLandingPage() {
+            return `
+                <div class="min-h-full flex flex-col bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 text-white">
+                    <!-- Navigation Header -->
+                    <header class="w-full max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                                <i class="fa-solid fa-graduation-cap text-xl text-white"></i>
+                            </div>
+                            <span class="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-indigo-200 bg-clip-text text-transparent">CampusAI</span>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <button onclick="toggleDarkMode()" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition text-slate-200">
+                                <i class="fa-solid ${appState.darkMode ? 'fa-sun' : 'fa-moon'}"></i>
+                            </button>
+                        </div>
+                    </header>
+
+                    <!-- Hero Section -->
+                    <main class="flex-1 max-w-7xl mx-auto px-6 flex flex-col lg:flex-row items-center justify-center py-12 lg:py-20 gap-12">
+                        <div class="flex-1 text-center lg:text-left space-y-6">
+                            <div class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-semibold tracking-wide uppercase">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                <span>Next-Gen University Portal & AI Assistant</span>
+                            </div>
+                            <h1 class="text-4xl sm:text-6xl font-extrabold tracking-tight leading-tight">
+                                Your Entire Campus Experience, <span class="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">Powered by AI.</span>
+                            </h1>
+                            <p class="text-slate-300 text-lg sm:text-xl max-w-2xl mx-auto lg:mx-0">
+                                Instantly find classrooms, check grades, chat with the 24/7 AI student advisor, and manage campus resources all in one sleek platform.
+                            </p>
+                            <div class="pt-4 flex flex-wrap justify-center lg:justify-start gap-4">
+                                <button onclick="quickLogin('student')" class="px-6 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-lg shadow-indigo-600/30 transition transform hover:-translate-y-0.5 flex items-center space-x-2">
+                                    <i class="fa-solid fa-user-graduate"></i>
+                                    <span>Login as Student</span>
+                                </button>
+                                <button onclick="quickLogin('faculty')" class="px-6 py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-semibold shadow-lg transition transform hover:-translate-y-0.5 flex items-center space-x-2">
+                                    <i class="fa-solid fa-chalkboard-user"></i>
+                                    <span>Login as Faculty</span>
+                                </button>
+                                <button onclick="quickLogin('admin')" class="px-6 py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-semibold shadow-lg transition transform hover:-translate-y-0.5 flex items-center space-x-2">
+                                    <i class="fa-solid fa-shield-halved"></i>
+                                    <span>Login as Admin</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Interactive Demo Card Preview -->
+                        <div class="flex-1 w-full max-w-lg">
+                            <div class="rounded-2xl bg-slate-800/80 border border-slate-700/80 p-6 shadow-2xl backdrop-blur-xl relative overflow-hidden">
+                                <div class="absolute -top-24 -right-24 w-48 h-48 bg-indigo-500/20 rounded-full blur-3xl"></div>
+                                <div class="flex items-center justify-between pb-4 border-b border-slate-700">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-3 h-3 rounded-full bg-rose-500"></div>
+                                        <div class="w-3 h-3 rounded-full bg-amber-500"></div>
+                                        <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+                                    </div>
+                                    <span class="text-xs font-medium text-slate-400">CampusAI Live Feed</span>
+                                </div>
+                                <div class="py-6 space-y-4">
+                                    <div class="flex items-start space-x-3">
+                                        <div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold shrink-0">AI</div>
+                                        <div class="bg-slate-700/70 p-3.5 rounded-2xl rounded-tl-none text-sm text-slate-200">
+                                            Welcome Alex! Looking for your 10:00 AM class? Hall B is in the Science Center. Need anything else?
+                                        </div>
+                                    </div>
+                                    <div class="flex items-end justify-end space-x-3">
+                                        <div class="bg-indigo-600 p-3.5 rounded-2xl rounded-tr-none text-sm text-white">
+                                            Where is the library? Is it open 24/7 today?
+                                        </div>
+                                        <div class="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center text-xs font-bold shrink-0">AJ</div>
+                                    </div>
+                                    <div class="flex items-start space-x-3">
+                                        <div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold shrink-0">AI</div>
+                                        <div class="bg-slate-700/70 p-3.5 rounded-2xl rounded-tl-none text-sm text-slate-200">
+                                            Yes! The University Library is open 24/7 this week during midterms.
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="pt-2">
+                                    <div class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-400 flex items-center justify-between">
+                                        <span>Ask CampusAI anything...</span>
+                                        <i class="fa-solid fa-paper-plane text-indigo-400"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+
+                    <footer class="py-6 text-center text-xs text-slate-500 border-t border-slate-800">
+                        CampusAI University Portal &copy; 2026. All rights reserved. Full-Stack Express & Vanilla JS Architecture.
+                    </footer>
+                </div>
+            `;
+        }
+
+        function renderMainLayout() {
+            const user = appState.currentUser;
+            return `
+                <div class="h-full flex flex-col lg:flex-row overflow-hidden bg-slate-50 dark:bg-slate-900">
+                    <!-- Sidebar Navigation -->
+                    <aside class="w-full lg:w-72 bg-white dark:bg-slate-800 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-700 flex flex-col justify-between shrink-0">
+                        <div>
+                            <!-- Logo / Brand -->
+                            <div class="p-6 flex items-center justify-between border-b border-slate-100 dark:border-slate-700/50">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+                                        <i class="fa-solid fa-graduation-cap text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <h2 class="font-bold text-lg leading-none tracking-tight">CampusAI</h2>
+                                        <span class="text-xs text-slate-500 dark:text-slate-400 capitalize">${user.role} Portal</span>
+                                    </div>
+                                </div>
+                                <button onclick="toggleDarkMode()" class="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition">
+                                    <i class="fa-solid ${appState.darkMode ? 'fa-sun text-amber-400' : 'fa-moon'}"></i>
+                                </button>
+                            </div>
+
+                            <!-- Nav Menu Tabs -->
+                            <nav class="p-4 space-y-1.5">
+                                <button onclick="switchTab('chat')" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium transition ${appState.activeTab === 'chat' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'}">
+                                    <i class="fa-solid fa-wand-magic-sparkles w-5"></i>
+                                    <span>CampusAI Assistant</span>
+                                </button>
+                                <button onclick="switchTab('map')" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium transition ${appState.activeTab === 'map' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'}">
+                                    <i class="fa-solid fa-map-location-dot w-5"></i>
+                                    <span>Map & Directory</span>
+                                </button>
+                                <button onclick="switchTab('portal')" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium transition ${appState.activeTab === 'portal' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'}">
+                                    <i class="fa-solid fa-user-graduate w-5"></i>
+                                    <span>Student Portal & Schedule</span>
+                                </button>
+                                ${user.role === 'admin' ? `
+                                    <button onclick="switchTab('admin')" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium transition ${appState.activeTab === 'admin' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'}">
+                                        <i class="fa-solid fa-shield-halved w-5"></i>
+                                        <span>Admin Control Panel</span>
+                                    </button>
+                                ` : ''}
+                            </nav>
+                        </div>
+
+                        <!-- User Profile Card & Logout -->
+                        <div class="p-4 border-t border-slate-100 dark:border-slate-700/50">
+                            <div class="flex items-center space-x-3 mb-3 p-2 rounded-xl bg-slate-50 dark:bg-slate-700/40">
+                                <img src="${user.avatar}" alt="${user.name}" class="w-10 h-10 rounded-full object-cover">
+                                <div class="overflow-hidden flex-1">
+                                    <h4 class="text-sm font-semibold truncate">${user.name}</h4>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400 truncate">${user.email}</p>
+                                </div>
+                            </div>
+                            <button onclick="logout()" class="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-600 dark:hover:text-rose-400 text-slate-700 dark:text-slate-200 text-xs font-semibold transition">
+                                <i class="fa-solid fa-right-from-bracket"></i>
+                                <span>Sign Out</span>
+                            </button>
+                        </div>
+                    </aside>
+
+                    <!-- Main Content Area -->
+                    <main class="flex-1 flex flex-col overflow-hidden">
+                        ${renderActiveTabContent()}
+                    </main>
+                </div>
+            `;
+        }
+
+        function renderActiveTabContent() {
+            switch(appState.activeTab) {
+                case 'chat': return renderChatTab();
+                case 'map': return renderMapTab();
+                case 'portal': return renderPortalTab();
+                case 'admin': return renderAdminTab();
+                default: return renderChatTab();
+            }
+        }
+
+        function renderChatTab() {
+            return `
+                <div class="flex-1 flex flex-col h-full overflow-hidden bg-slate-50 dark:bg-slate-900">
+                    <!-- Top Header -->
+                    <header class="h-16 px-6 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between shrink-0">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-sm">CampusAI Virtual Assistant</h3>
+                                <p class="text-xs text-emerald-500 font-medium flex items-center space-x-1.5">
+                                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    <span>Online • Ready to assist with campus navigation & academics</span>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="clearChat()" class="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition">
+                                <i class="fa-solid fa-rotate-right mr-1"></i> Reset Chat
+                            </button>
+                        </div>
+                    </header>
+
+                    <!-- Chat Messages Stream -->
+                    <div id="chat-messages-container" class="flex-1 overflow-y-auto p-6 space-y-6">
+                        ${DB.messages.map(msg => `
+                            <div class="flex items-start space-x-3 ${msg.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''} animate-fade-in">
+                                <div class="w-9 h-9 rounded-full ${msg.sender === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-indigo-400 border border-slate-700'} flex items-center justify-center font-bold text-xs shrink-0 shadow">
+                                    ${msg.sender === 'user' ? appState.currentUser.name.split(' ').map(n=>n[0]).join('') : 'AI'}
+                                </div>
+                                <div class="max-w-xl">
+                                    <div class="p-4 rounded-2xl ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-tr-none shadow-md shadow-indigo-600/20' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-tl-none shadow-sm'} text-sm leading-relaxed whitespace-pre-wrap">
+                                        ${msg.text}
+                                    </div>
+                                    <span class="block text-[10px] text-slate-400 mt-1 px-1 ${msg.sender === 'user' ? 'text-right' : ''}">${msg.time}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <!-- Preset Prompt Suggestions -->
+                    <div class="px-6 py-3 bg-white/50 dark:bg-slate-800/50 backdrop-blur border-t border-slate-200 dark:border-slate-700 flex items-center space-x-2 overflow-x-auto shrink-0">
+                        <span class="text-xs font-semibold text-slate-400 shrink-0"><i class="fa-solid fa-lightbulb text-amber-400 mr-1"></i> Try asking:</span>
+                        <button onclick="sendPresetPrompt('Where is Hall B?')" class="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-xs font-medium text-slate-700 dark:text-slate-300 transition whitespace-nowrap">Where is Hall B?</button>
+                        <button onclick="sendPresetPrompt('When is the add/drop deadline?')" class="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-xs font-medium text-slate-700 dark:text-slate-300 transition whitespace-nowrap">Add/Drop deadline?</button>
+                        <button onclick="sendPresetPrompt('Help me draft an email to my professor')" class="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-xs font-medium text-slate-700 dark:text-slate-300 transition whitespace-nowrap">Draft email to professor</button>
+                    </div>
+
+                    <!-- Chat Input Form -->
+                    <div class="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 shrink-0">
+                        <form onsubmit="handleChatSubmit(event)" class="flex items-center space-x-3">
+                            <input type="text" id="chat-input-field" placeholder="Ask about campus buildings, professors, schedules, or library hours..." class="flex-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                            <button type="submit" class="px-5 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-lg shadow-indigo-600/30 transition flex items-center space-x-2">
+                                <span>Send</span>
+                                <i class="fa-solid fa-paper-plane text-xs"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderMapTab() {
+            const filteredLocations = DB.locations.filter(l => 
+                l.name.toLowerCase().includes(appState.searchQuery.toLowerCase()) ||
+                l.desc.toLowerCase().includes(appState.searchQuery.toLowerCase())
+            );
+
+            return `
+                <div class="flex-1 flex flex-col h-full overflow-y-auto bg-slate-50 dark:bg-slate-900 p-6 space-y-6">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <h2 class="text-2xl font-bold tracking-tight">Campus Map & Directory</h2>
+                            <p class="text-sm text-slate-500 dark:text-slate-400">Search university buildings, lecture halls, and student facilities.</p>
+                        </div>
+                        <div class="w-full md:w-80">
+                            <div class="relative">
+                                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-slate-400 text-sm"></i>
+                                <input type="text" oninput="appState.searchQuery = this.value; render();" value="${appState.searchQuery}" placeholder="Search buildings or facilities..." class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Map Simulation Card -->
+                    <div class="rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 shadow-sm relative overflow-hidden">
+                        <div class="h-64 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center relative overflow-hidden">
+                            <div class="absolute inset-0 opacity-10 bg-[radial-gradient(#6366f1_1px,transparent_1px)] [background-size:16px_16px]"></div>
+                            <i class="fa-solid fa-map text-indigo-500 text-4xl mb-3 animate-bounce"></i>
+                            <span class="text-sm font-semibold">Interactive Campus Vector Grid</span>
+                            <span class="text-xs text-slate-400 mt-1">Select a location below to pinpoint coordinates and walking directions</span>
+                        </div>
+                    </div>
+
+                    <!-- Location Cards Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${filteredLocations.map(loc => `
+                            <div class="rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-5 shadow-sm hover:border-indigo-500/50 transition">
+                                <div class="flex items-start justify-between">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+                                            <i class="fa-solid fa-building-columns"></i>
+                                        </div>
+                                        <div>
+                                            <h4 class="font-bold text-base">${loc.name}</h4>
+                                            <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium">${loc.type}</span>
+                                        </div>
+                                    </div>
+                                    <button onclick="showToast('Directions generated to ${loc.name}!')" class="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition text-xs font-semibold flex items-center space-x-1">
+                                        <i class="fa-solid fa-diamond-turn-right"></i>
+                                        <span>Navigate</span>
+                                    </button>
+                                </div>
+                                <p class="text-sm text-slate-600 dark:text-slate-300 mt-3">${loc.desc}</p>
+                                <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/50 flex items-center justify-between text-xs text-slate-500">
+                                    <span><i class="fa-regular fa-clock mr-1"></i> ${loc.hours}</span>
+                                    <span class="text-indigo-600 dark:text-indigo-400 font-medium cursor-pointer" onclick="sendPresetPrompt('Where is ${loc.name}?')">Ask AI about this place <i class="fa-solid fa-arrow-right ml-1"></i></span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderPortalTab() {
+            const user = appState.currentUser;
+            return `
+                <div class="flex-1 flex flex-col h-full overflow-y-auto bg-slate-50 dark:bg-slate-900 p-6 space-y-6">
+                    <div>
+                        <h2 class="text-2xl font-bold tracking-tight">Student Academic Portal</h2>
+                        <p class="text-sm text-slate-500 dark:text-slate-400">Manage course enrollments, active schedule, and GPA standing.</p>
+                    </div>
+
+                    <!-- Stats Overview Cards -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+                            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Cumulative GPA</span>
+                            <div class="flex items-baseline space-x-2 mt-2">
+                                <span class="text-3xl font-extrabold text-indigo-600 dark:text-indigo-400">${user.gpa || '3.82'}</span>
+                                <span class="text-xs font-medium text-emerald-500"><i class="fa-solid fa-arrow-up"></i> Top 5%</span>
+                            </div>
+                        </div>
+                        <div class="rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+                            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Completed Credits</span>
+                            <div class="flex items-baseline space-x-2 mt-2">
+                                <span class="text-3xl font-extrabold">${user.credits || '78'}</span>
+                                <span class="text-xs font-medium text-slate-400">/ 120 Required</span>
+                            </div>
+                        </div>
+                        <div class="rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+                            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Academic Standing</span>
+                            <div class="flex items-baseline space-x-2 mt-2">
+                                <span class="text-3xl font-extrabold text-emerald-500">Good</span>
+                                <span class="text-xs font-medium text-slate-400">Dean's List</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Enrolled Courses Table -->
+                    <div class="rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                        <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                            <h3 class="font-bold text-base">Enrolled Courses & Schedule</h3>
+                            <button onclick="showToast('Course registration portal opens November 1st.')" class="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 text-xs font-semibold hover:bg-indigo-100 transition">
+                                <i class="fa-solid fa-plus mr-1"></i> Add / Drop Courses
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs font-semibold text-slate-400 uppercase">
+                                        <th class="p-4">Course Code</th>
+                                        <th class="p-4">Course Name</th>
+                                        <th class="p-4">Instructor</th>
+                                        <th class="p-4">Schedule & Location</th>
+                                        <th class="p-4">Credits</th>
+                                        <th class="p-4">Grade</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 dark:divide-slate-700/50 text-sm">
+                                    ${DB.courses.map(c => `
+                                        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition">
+                                            <td class="p-4 font-bold text-indigo-600 dark:text-indigo-400">${c.code}</td>
+                                            <td class="p-4 font-semibold">${c.name}</td>
+                                            <td class="p-4 text-slate-600 dark:text-slate-300">${c.instructor}</td>
+                                            <td class="p-4 text-slate-600 dark:text-slate-300">${c.schedule}<br><span class="text-xs text-slate-400">${c.room}</span></td>
+                                            <td class="p-4">${c.credits}</td>
+                                            <td class="p-4">
+                                                <span class="px-2.5 py-1 rounded-full text-xs font-bold ${c.grade === 'In Progress' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}">
+                                                    ${c.grade}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderAdminTab() {
+            return `
+                <div class="flex-1 flex flex-col h-full overflow-y-auto bg-slate-50 dark:bg-slate-900 p-6 space-y-6">
+                    <div>
+                        <h2 class="text-2xl font-bold tracking-tight">Admin Control Panel</h2>
+                        <p class="text-sm text-slate-500 dark:text-slate-400">Manage university database CSV imports, campus announcements, and system logs.</p>
+                    </div>
+
+                    <!-- CSV Import Simulator & Announcements Grid -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- CSV Import Card -->
+                        <div class="rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 shadow-sm flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center space-x-3 mb-4">
+                                    <div class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+                                        <i class="fa-solid fa-file-csv"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-bold text-base">Student & Course CSV Import</h3>
+                                        <span class="text-xs text-slate-400">Bulk upload semester rosters</span>
+                                    </div>
+                                </div>
+                                <div class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-6 text-center hover:border-indigo-500 transition cursor-pointer" onclick="simulateCsvImport()">
+                                    <i class="fa-solid fa-cloud-arrow-up text-3xl text-indigo-500 mb-2"></i>
+                                    <p class="text-sm font-semibold">Click to simulate CSV roster upload</p>
+                                    <p class="text-xs text-slate-400 mt-1">Supports student_roster.csv & course_catalog.csv</p>
+                                </div>
+                                ${appState.adminCsvStatus ? `
+                                    <div class="mt-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-medium flex items-center space-x-2">
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span>${appState.adminCsvStatus}</span>
+                                    </div>
+                                ` : ''}
+                            </div>
+                            <button onclick="simulateCsvImport()" class="mt-6 w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-lg shadow-indigo-600/20 transition">
+                                Run CSV Database Sync
+                            </button>
+                        </div>
+
+                        <!-- Broadcast Announcement Card -->
+                        <div class="rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 shadow-sm flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center space-x-3 mb-4">
+                                    <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold">
+                                        <i class="fa-solid fa-bullhorn"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-bold text-base">Broadcast Campus Announcement</h3>
+                                        <span class="text-xs text-slate-400">Push notification to all student & faculty portals</span>
+                                    </div>
+                                </div>
+                                <form onsubmit="handleAnnouncementSubmit(event)" class="space-y-3">
+                                    <input type="text" id="ann-title" placeholder="Announcement Title..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <textarea id="ann-content" placeholder="Announcement message content..." rows="3" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                                    <button type="submit" class="w-full py-3 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white font-semibold transition">
+                                        Broadcast Announcement
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- System Logs Table -->
+                    <div class="rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                        <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                            <h3 class="font-bold text-base">System Audit Logs & Vector Sync</h3>
+                            <button onclick="showToast('System logs refreshed successfully.')" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 transition">
+                                <i class="fa-solid fa-rotate mr-1"></i> Refresh Logs
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs font-semibold text-slate-400 uppercase">
+                                        <th class="p-4">Timestamp</th>
+                                        <th class="p-4">Event Type</th>
+                                        <th class="p-4">Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 dark:divide-slate-700/50 text-sm font-mono">
+                                    ${DB.logs.map(l => `
+                                        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition">
+                                            <td class="p-4 text-slate-500">${l.timestamp}</td>
+                                            <td class="p-4">
+                                                <span class="px-2 py-0.5 rounded text-xs font-bold ${l.type === 'AUTH' ? 'bg-indigo-500/10 text-indigo-500' : l.type === 'SYSTEM' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}">
+                                                    ${l.type}
+                                                </span>
+                                            </td>
+                                            <td class="p-4 text-slate-700 dark:text-slate-300">${l.details}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function quickLogin(role) {
+            const user = DB.users.find(u => u.role === role);
+            if (user) {
+                appState.currentUser = user;
+                appState.activeTab = 'chat';
+                showToast(`Logged in successfully as ${user.name} (${user.role})!`);
+                render();
+            }
+        }
+
+        function logout() {
+            appState.currentUser = null;
+            showToast('Signed out successfully.', 'info');
+            render();
+        }
+
+        function switchTab(tab) {
+            appState.activeTab = tab;
+            render();
+        }
+
+        function toggleDarkMode() {
+            appState.darkMode = !appState.darkMode;
+            render();
+        }
+
+        function clearChat() {
+            DB.messages = [
+                { sender: 'ai', text: 'Chat history cleared. How can I assist you today?', time: 'Just now' }
+            ];
+            showToast('Chat history cleared.', 'info');
+            render();
+        }
+
+        function sendPresetPrompt(promptText) {
+            DB.messages.push({ sender: 'user', text: promptText, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+            render();
+            scrollToBottom();
+
+            setTimeout(() => {
+                const aiReply = getAIResponse(promptText);
+                DB.messages.push({ sender: 'ai', text: aiReply, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+                render();
+                scrollToBottom();
+            }, 600);
+        }
+
+        function handleChatSubmit(e) {
+            e.preventDefault();
+            const inputField = document.getElementById('chat-input-field');
+            const text = inputField.value.trim();
+            if (!text) return;
+
+            DB.messages.push({ sender: 'user', text: text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+            inputField.value = '';
+            render();
+            scrollToBottom();
+
+            setTimeout(() => {
+                const aiReply = getAIResponse(text);
+                DB.messages.push({ sender: 'ai', text: aiReply, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+                render();
+                scrollToBottom();
+            }, 700);
+        }
+
+        function scrollToBottom() {
+            const container = document.getElementById('chat-messages-container');
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+
+        function simulateCsvImport() {
+            appState.adminCsvStatus = 'Successfully processed student_roster.csv (450 rows) & updated vector database embeddings.';
+            DB.logs.unshift({ id: 'l_new', timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), type: 'SYSTEM', details: 'CSV roster batch import completed successfully (450 records).' });
+            showToast('CSV roster imported and indexed successfully!');
+            render();
+        }
+
+        function handleAnnouncementSubmit(e) {
+            e.preventDefault();
+            const titleInput = document.getElementById('ann-title');
+            const contentInput = document.getElementById('ann-content');
+            if (!titleInput.value || !contentInput.value) {
+                showToast('Please fill in both announcement title and content.', 'error');
+                return;
+            }
+
+            DB.announcements.unshift({
+                id: 'a_' + Date.now(),
+                title: titleInput.value,
+                date: 'Today',
+                author: appState.currentUser.name,
+                content: contentInput.value
+            });
+
+            DB.logs.unshift({
+                id: 'l_ann_' + Date.now(),
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                type: 'SYSTEM',
+                details: `Broadcast announcement published: "${titleInput.value}"`
+            });
+
+            showToast('Announcement broadcasted to all portals!');
+            titleInput.value = '';
+            contentInput.value = '';
+            render();
+        }
+
+        function attachEventListeners() {
+            // Auto scroll chat on initial render if on chat tab
+            if (appState.activeTab === 'chat') {
+                scrollToBottom();
+            }
+        }
+
+        // Initialize application on load
+        window.onload = function() {
+            render();
+        };
+    </script>
+</body>
+</html>
